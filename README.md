@@ -13,6 +13,26 @@ InsuranceX allows employers to pool premiums and provides unemployment benefits 
 - **Claims** are submitted by employees and approved/rejected by employers
 - **Benefits** are withdrawn monthly by eligible unemployed workers
 
+## Available Versions
+
+### 🔷 UnemploymentVault (ETH)
+- Native ETH-based implementation
+- Salaries and benefits denominated in ETH
+- Simple deployment for testing
+- **File**: `src/UnemploymentVault.sol`
+
+### 💵 UnemploymentVaultUSDC (USDC)
+- ERC20 stablecoin implementation (USDC)
+- Salaries and benefits in USD (6 decimals)
+- Production-ready for real-world use
+- **Files**: 
+  - `src/UnemploymentVaultUSDC.sol` (main contract)
+  - `src/MockUSDC.sol` (testing token)
+  - `src/IERC20.sol` (minimal interface)
+  - `src/ERC20.sol` (minimal implementation)
+
+**Recommendation**: Use USDC version for production - no OpenZeppelin dependencies, stable value, familiar denominations.
+
 ## Contract Features
 
 ### ✅ Implemented
@@ -26,10 +46,10 @@ InsuranceX allows employers to pool premiums and provides unemployment benefits 
 - Monthly benefit withdrawals with 30-day intervals (pull model)
 - Benefit calculation: 70% of last salary
 - Dynamic benefit duration based on employment length (3-24 months)
+- **Both ETH and USDC versions available**
 
 ### 🚧 Future Enhancements
 - Comprehensive test suite with edge cases
-- ERC20 token support (USDC instead of ETH)
 - Weighted average salary calculation (for varying salaries)
 - Yield generation on pooled funds (integrate with Aave/Compound)
 - Merkle trees for gas-efficient bulk operations
@@ -38,6 +58,7 @@ InsuranceX allows employers to pool premiums and provides unemployment benefits 
 - Dispute resolution mechanism
 - Governance/admin controls
 - Emergency pause functionality
+- Re-employment support
 - Parametric triggers (integration with oracles)
 
 ## Key Parameters
@@ -78,38 +99,6 @@ InsuranceX allows employers to pool premiums and provides unemployment benefits 
                                                       Status: COMPLETED
 ```
 
-### Data Structures
-
-**Employment Record**
-```solidity
-struct Employment {
-    address employer;
-    address employee;
-    uint256 startDate;
-    uint256 endDate;              // 0 if still active
-    uint256 currentMonthlySalary; // In wei
-    uint256 totalPremiumsPaid;
-    uint256 lastPremiumPaymentDate;
-    bool isActive;
-}
-```
-
-**Benefit Claim**
-```solidity
-struct Claim {
-    address employee;
-    address employer;
-    uint256 applicationDate;
-    uint256 employeeDeclaredEndDate;
-    uint256 employerConfirmedEndDate;
-    ClaimStatus status;           // NONE, PENDING, APPROVED, REJECTED, COMPLETED
-    uint256 benefitDurationMonths;
-    uint256 monthlyBenefitAmount;
-    uint256 monthsWithdrawn;
-    uint256 approvalTimestamp;
-    uint256 lastWithdrawalTimestamp;
-}
-```
 
 ## Benefit Calculation Formula
 
@@ -174,7 +163,7 @@ forge test
 anvil
 ```
 
-**Terminal 2 - Deploy contract:**
+**Terminal 2 - Deploy ETH Version:**
 ```bash
 forge script script/DeployVault.s.sol:DeployUnemploymentVault \
   --rpc-url http://localhost:8545 \
@@ -182,15 +171,23 @@ forge script script/DeployVault.s.sol:DeployUnemploymentVault \
   -vv
 ```
 
-This deployment script will:
-1. Deploy the UnemploymentVault contract
+**Terminal 2 - Deploy USDC Version:**
+```bash
+forge script script/DeployVaultUSDC.s.sol:DeployUnemploymentVaultUSDC \
+  --rpc-url http://localhost:8545 \
+  --broadcast \
+  -vv
+```
+
+Both deployment scripts will:
+1. Deploy the contract (and MockUSDC for USDC version)
 2. Register 10 employers
 3. Register 100 employees (10 per employer) using batch registration
 4. Deposit initial premiums for all employees
 5. Simulate a complete unemployment claim flow with withdrawals
 
 **Expected output:**
-- Contract address
+- Contract address (and USDC address for USDC version)
 - 10 registered employers
 - 100 registered employees
 - Total pooled funds from premiums
@@ -207,9 +204,21 @@ export ARBISCAN_API_KEY=your_arbiscan_api_key  # For contract verification
 2. **Get testnet ETH**: 
    - Visit [Arbitrum Sepolia Faucet](https://faucet.quicknode.com/arbitrum/sepolia)
 
-3. **Deploy**:
+3. **Deploy ETH Version**:
 ```bash
 forge script script/DeployVault.s.sol:DeployUnemploymentVault \
+  --rpc-url https://sepolia-rollup.arbitrum.io/rpc \
+  --broadcast \
+  --verify \
+  -vv
+```
+
+4. **Deploy USDC Version** (with real testnet USDC):
+```bash
+# Use real Arbitrum Sepolia USDC: 0x75faf114eafb1BDbe2F0316DF893fd58CE46AA4d
+# Or deploy MockUSDC for testing
+
+forge script script/DeployVaultUSDC.s.sol:DeployUnemploymentVaultUSDC \
   --rpc-url https://sepolia-rollup.arbitrum.io/rpc \
   --broadcast \
   --verify \
@@ -220,105 +229,34 @@ forge script script/DeployVault.s.sol:DeployUnemploymentVault \
 
 ⚠️ **NOT RECOMMENDED** - This is a POC and has not been audited!
 
+**For USDC Version with Real USDC:**
+- Arbitrum One USDC: `0xaf88d065e77c8cC2239327C5EDb3A432268e5831`
+
 ```bash
-forge script script/DeployVault.s.sol:DeployUnemploymentVault \
+forge script script/DeployVaultUSDC.s.sol:DeployUnemploymentVaultUSDC \
   --rpc-url https://arb1.arbitrum.io/rpc \
   --broadcast \
   --verify \
   -vv
 ```
 
-## Interacting with the Contract
-
-### View Functions (Cast)
-
-**Check contract statistics:**
-```bash
-cast call <CONTRACT_ADDRESS> "getContractStats()" --rpc-url http://localhost:8545
-# Returns: (employerCount, employeeCount, poolBalance)
-```
-
-**Check employment record:**
-```bash
-cast call <CONTRACT_ADDRESS> "getEmployment(address,address)" \
-  <EMPLOYER_ADDRESS> \
-  <EMPLOYEE_ADDRESS> \
-  --rpc-url http://localhost:8545
-```
-
-**Check claim status:**
-```bash
-cast call <CONTRACT_ADDRESS> "getClaim(address)" \
-  <EMPLOYEE_ADDRESS> \
-  --rpc-url http://localhost:8545
-```
-
-**Calculate benefit duration:**
-```bash
-cast call <CONTRACT_ADDRESS> "calculateBenefitDuration(uint256)" 24 \
-  --rpc-url http://localhost:8545
-# Returns: 5 (months of benefits for 24 months employment)
-```
-
-### Write Functions (Cast)
-
-**Register as employer:**
-```bash
-cast send <CONTRACT_ADDRESS> "registerEmployer()" \
-  --private-key <YOUR_PRIVATE_KEY> \
-  --rpc-url http://localhost:8545
-```
-
-**Register employee (as employer):**
-```bash
-cast send <CONTRACT_ADDRESS> "registerEmployee(address,uint256)" \
-  <EMPLOYEE_ADDRESS> \
-  5000000000000000000000 \
-  --private-key <EMPLOYER_PRIVATE_KEY> \
-  --rpc-url http://localhost:8545
-# 5000 ETH monthly salary (in wei)
-```
-
-**Deposit premium (as employer):**
-```bash
-cast send <CONTRACT_ADDRESS> "depositPremium(address)" \
-  <EMPLOYEE_ADDRESS> \
-  --value 150000000000000000000 \
-  --private-key <EMPLOYER_PRIVATE_KEY> \
-  --rpc-url http://localhost:8545
-# 150 ETH = 3% of 5000 ETH salary
-```
-
-## Testing Accounts (Anvil)
-
-Anvil provides 10 pre-funded accounts. The deployment script uses:
-
-| Account Index | Type | Address |
-|--------------|------|---------|
-| 0-9 | Employers | `0xf39Fd...` through `0xa0Ee7...` |
-| 10-19 | Employees | `0xBcd40...` through `0x8626f...` |
-| 20-109 | Employees | Derived addresses |
-
-**Default Account 0:**
-- Address: `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`
-- Private Key: `0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80`
-- Balance: 10,000 ETH
-
 ## Development Roadmap
 
 ### Phase 1: Core POC ✅
 - [x] Basic contract structure
-- [x] Employer and employee registration
-- [x] Premium deposits
+- [x] Employer and employee registration (batch support)
+- [x] Premium deposits (ETH and USDC)
 - [x] Claim submission and approval flow
 - [x] Benefit withdrawals
 - [x] Deployment scripts
+- [x] Both ETH and USDC implementations
 
 ### Phase 2: Optimization & Testing 🚧
 - [ ] Comprehensive unit tests
 - [ ] Integration tests
 - [ ] Gas optimization
 - [ ] Edge case handling
+- [ ] Re-employment support
 - [ ] Error message improvements
 
 ### Phase 3: Scalability 📋
@@ -336,32 +274,10 @@ Anvil provides 10 pre-funded accounts. The deployment script uses:
 
 ### Phase 5: DeFi Integration 📋
 - [ ] Yield generation on pooled funds (Aave/Compound)
-- [ ] ERC20 token support (USDC/USDT)
 - [ ] Multi-asset premium payments
 - [ ] Liquidity management strategies
+- [ ] Cross-chain support
 
-## Architecture Decisions
-
-### Why Pooled Insurance Model?
-All employer premiums go into a single pool, similar to real-world unemployment insurance. This provides:
-- **Risk distribution** across all employers
-- **Simplified accounting** and fund management
-- **Scalability** for adding new participants
-- **Realistic model** matching traditional systems
-
-### Why Not ERC4626?
-ERC4626 vaults are designed for situations where depositors = withdrawers. In this system:
-- **Depositors** = Employers
-- **Withdrawers** = Employees
-- This asymmetry makes ERC4626 unsuitable
-- Could integrate with ERC4626 vaults for yield generation later
-
-### Scalability Strategy
-For production with millions of employees:
-- **On-chain**: Only commitments (Merkle roots), settlements, and disputes
-- **Off-chain**: Detailed records, employment history, calculations
-- **Proofs**: Merkle proofs for verification, ZK proofs for privacy
-- **Cost**: O(1) on-chain storage instead of O(n)
 
 ## Known Limitations
 
@@ -374,7 +290,7 @@ For production with millions of employees:
 - **Gas costs** - Not optimized for large-scale deployment
 - **Single claim per employee** - Cannot handle re-employment scenarios yet
 - **No dispute mechanism** - Rejected claims are final
-- **ETH only** - No stablecoin support yet
+- **No comprehensive tests** - Test coverage needed
 
 ## Security Considerations
 
@@ -384,6 +300,7 @@ For production with millions of employees:
 ✅ Time-based validation (30-day intervals for withdrawals)  
 ✅ State machine for claim status  
 ✅ Pool solvency checks before withdrawals  
+✅ SafeERC20 for token transfers (USDC version)  
 
 ### Not Yet Implemented
 ❌ Comprehensive test coverage  
